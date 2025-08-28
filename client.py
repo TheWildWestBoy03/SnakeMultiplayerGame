@@ -8,6 +8,11 @@ import json
 threads = []
 players = []
 generated_fruits = []
+player1_score = 0
+player2_score = 0
+match_state = "RUNNING"
+player_winner = "NONE"
+player_loser = "NONE"
 
 # represents the current client, whose main role is just drawing on a window. The window is share
 # among all players(currently limited to maximum 2 players)
@@ -16,7 +21,7 @@ class Player:
         self.name = name
         self.server = "127.0.0.1"
         self.last_direction = last_direction
-        self.port = 3000
+        self.port = 3001
         self.color = color
         self.snake_positions = []
         self.score = 0
@@ -117,7 +122,27 @@ def get_scene_fruits(player):
     player.socket.send(json.dumps(get_fruits_message.return_dictionary()).encode("utf-8"))
     response = json.loads(player.socket.recv(2048).decode("utf-8"))
     generated_fruits = response["message"]
-    print(generated_fruits)
+
+def get_player_scores(player):
+    global player1_score, player2_score
+    get_scores_message = message.Message(str(uuid.uuid4()), player.name, "GET_SCORES", "GET_SCORES")
+    player.socket.send(json.dumps(get_scores_message.return_dictionary()).encode("utf-8"))
+    response = json.loads(player.socket.recv(2048).decode("utf-8"))
+    player1_score = response["message"][0]
+    player2_score = response["message"][1]
+
+def get_match_ending(player):
+    global match_state, player_winner, player_loser
+    get_ending_message = message.Message(str(uuid.uuid4()), "client", "GET_MATCH_STATE", "GET_MATCH_STATE")
+    player.socket.send(json.dumps(get_ending_message.return_dictionary()).encode("utf-8"))
+    response = json.loads(player.socket.recv(2048).decode("utf-8"))
+
+    match_state = response["message"][0]
+    if len(response["message"]) > 1:
+        player_winner = response["message"][1]
+        player_loser = response["message"][2]
+
+        print(match_state)
 
 def draw_scene(game_screen):
     game_screen.fill((255, 255, 255))
@@ -133,14 +158,29 @@ def draw_scene(game_screen):
     for i in range(0, len(generated_fruits)):
         pygame.draw.rect(game_screen, (255, 255, 0), pygame.Rect(generated_fruits[i][0], generated_fruits[i][1], 10, 10))
 
+    font = pygame.font.Font('freesansbold.ttf', 20)
+    player1_text_info = font.render("Player1: " + str(player1_score), True, (0, 0, 0))
+    player2_text_info = font.render("Player2: " + str(player2_score), True, (0, 0, 0))
+
+    game_screen.blit(player1_text_info, (15, 7))
+    game_screen.blit(player2_text_info, (800 - 150, 7))
+
+    if match_state == "STOPPED":
+        final_font = pygame.font.Font('freesansbold.ttf', 50)
+        winner_message = final_font.render(str(player_winner) + " wins!", True, (255, 255, 255))
+        loser_message = final_font.render(str(player_loser) + " loses!", True, (255, 255, 255))
+
+        game_screen.blit(winner_message, (400, 300))
+        game_screen.blit(loser_message, (400, 400))
+
 def main():
     game_screen = configure_pygame()
 
     player1_keys =[pygame.K_w, pygame.K_a, pygame.K_s, pygame.K_d]
     player2_keys =[pygame.K_UP, pygame.K_LEFT, pygame.K_DOWN, pygame.K_RIGHT]
 
-    player1 = Player("player1", "red", "12345", game_screen, player1_keys, "DOWN")
-    player2 = Player("player2", "blue", "12345", game_screen, player2_keys, "DOWN")
+    player1 = Player("player1", "red", "12345", game_screen, player1_keys, "UP")
+    player2 = Player("player2", "blue", "12345", game_screen, player2_keys, "UP")
 
     players.append(player1)
     players.append(player2)
@@ -167,7 +207,9 @@ def main():
                 generate_fruits(player1)
 
             get_scene_fruits(player1)
+            get_player_scores(player1)
             draw_scene(game_screen)
+            get_match_ending(player1)
 
         pygame.display.flip()
         clock.tick(30)

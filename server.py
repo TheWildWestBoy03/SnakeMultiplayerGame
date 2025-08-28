@@ -7,9 +7,10 @@ import random
 import math
 
 server_ip = "127.0.0.1"
-server_port = 3000
+server_port = 3001
 MAXIMUM_CLIENTS = 2
 login_token = "12345"
+current_clients = 0
 
 threads = []
 server_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
@@ -20,6 +21,8 @@ game_screen = None
 player1_snake = []
 player2_snake = []
 game_fruits = []
+player_winner = "NONE"
+player_loser = "NONE"
 
 player1_score = 0
 player2_score = 0
@@ -33,7 +36,7 @@ def handle_rect_collision(rect1, rect2):
     return (left_corner1_x <= left_corner2_x + width2) and (left_corner1_x + width1 >= left_corner2_x) and (left_corner1_y <= left_corner2_y + height2) and (left_corner1_y + height1 >= left_corner2_y)
 
 def handle_client(connection):
-    global player1_snake, player2_snake, player1_score, player2_score
+    global player1_snake, player2_snake, player1_score, player2_score, player_winner, player_loser
     while True:
         bytes = connection.recv(2048)
 
@@ -142,6 +145,14 @@ def handle_client(connection):
                     snake_head = player_coordinates[3]
                     snake_head_rect = [player_coordinates[3]["x"], player_coordinates[3]["y"], 30, 30]
 
+                    if snake_head["x"] < 30 or snake_head["x"] > 770 or snake_head["y"] < 30 or snake_head["y"] > 570:
+                        if (new_message["player"] == "player2"):
+                            player_winner = "player1"
+                            player_loser = "player2"
+                        else:
+                            player_winner = "player2"
+                            player_loser = "player1"
+
                     fruits_to_delete = []
                     for fruit in game_fruits:
                         fruit_rect = [fruit[0], fruit[1], 10, 10]
@@ -152,10 +163,16 @@ def handle_client(connection):
                             else:
                                 player2_score += 100
 
+                        if player1_score >= 1000:
+                            player_winner = "player1"
+                            player_loser = "player2"
+                        if player2_score >= 1000:
+                            player_winner = "player2"
+                            player_loser = "player1"
+
                     for fruit in fruits_to_delete:
                         game_fruits.remove(fruit)
 
-                    print(str(player1_score) + " " + str(player2_score))
                     if new_message["player"] == "player1":
                         player1_snake = player_coordinates
                     else:
@@ -196,17 +213,37 @@ def handle_client(connection):
             elif new_message["type"] == "GET_FRUITS":
                 response_message = message.Message(new_message["id"], new_message["player"], game_fruits, "RESPONSE")
                 connection.send(json.dumps(response_message.return_dictionary()).encode("utf-8"))
-            elif new_message["type"] == "CLOSE":
-                print("Close received")
-                break
+            elif new_message["type"] == "GET_SCORES":
+                response_message = message.Message(new_message["id"], new_message["player"], [player1_score, player2_score], "RESPONSE")
+                connection.send(json.dumps(response_message.return_dictionary()).encode("utf-8"))
+
+            elif new_message["type"] == "GET_MATCH_STATE":
+                match_result = []
+
+                print(player_winner)
+                if (player_winner == "NONE"):
+                    match_result.append("RUNNING")
+                else:
+                    match_result.append("STOPPED")
+                    match_result.append(player_winner)
+                    match_result.append(player_loser)
+
+                response_message = message.Message(new_message["id"], new_message["player"],
+                                                   match_result, "RESPONSE")
+                connection.send(json.dumps(response_message.return_dictionary()).encode("utf-8"))
+
+                if (match_result[0] == "STOPPED"):
+                    break
             else:
                 response = message.Message(new_message["id"], new_message["player"], "INVALID COMMAND", "RESPONSE")
                 response_json = json.dumps(response.return_dictionary()).encode("utf-8")
                 connection.send(response_json)
 
+
 for i in range(MAXIMUM_CLIENTS):
     conn, addr = server_socket.accept()
     print("Connected by", addr)
+    current_clients += 1
 
     t = threading.Thread(target=handle_client, args=(conn,))
     threads.append(t)
