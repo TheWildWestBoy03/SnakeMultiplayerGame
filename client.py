@@ -32,6 +32,7 @@ class Player:
         self.positions = {}
         self.keys = keys
         self.current_direction = ""
+        self.game_mode = ""
 
     def connect(self):
         self.socket.connect((self.server, self.port))
@@ -44,16 +45,24 @@ class Player:
         response = json.loads(self.socket.recv(2048).decode("utf-8"))
         return response["message"]
 
+    def set_game_mode(self):
+        new_message = message.Message(str(uuid.uuid4()), self.name, "","GAMEMODE")
+        encoded_message = json.dumps(new_message.return_dictionary()).encode("utf-8")
+        self.socket.send(encoded_message)
+        response = json.loads(self.socket.recv(2048).decode("utf-8"))
+        self.game_mode = response["message"]
+
     def update_function(self):
         self.snake_positions = self.send_login_token()
-
         if self.send_login_token() == "Invalid token":
             print("Invalid token")
         else:
             self.play = True
 
+        self.set_game_mode()
         for i in range(0, len(self.snake_positions)):
             pygame.draw.rect(self.screen, self.color, pygame.Rect(int(self.snake_positions[i]["x"]), int(self.snake_positions[i]["y"]), 30, 30))
+
 
     def display_player(self):
         print(self.server, self.port)
@@ -134,15 +143,16 @@ def get_player_scores(player):
 def get_match_ending(player):
     global match_state, player_winner, player_loser
     get_ending_message = message.Message(str(uuid.uuid4()), "client", "GET_MATCH_STATE", "GET_MATCH_STATE")
-    player.socket.send(json.dumps(get_ending_message.return_dictionary()).encode("utf-8"))
-    response = json.loads(player.socket.recv(2048).decode("utf-8"))
+    try:
+        player.socket.send(json.dumps(get_ending_message.return_dictionary()).encode("utf-8"))
+        response = json.loads(player.socket.recv(2048).decode("utf-8"))
+    except:
+        return
 
     match_state = response["message"][0]
     if len(response["message"]) > 1:
         player_winner = response["message"][1]
         player_loser = response["message"][2]
-
-        print(match_state)
 
 def draw_scene(game_screen):
     game_screen.fill((255, 255, 255))
@@ -174,6 +184,7 @@ def draw_scene(game_screen):
         game_screen.blit(loser_message, (400, 400))
 
 def main():
+    global match_state
     game_screen = configure_pygame()
 
     player1_keys =[pygame.K_w, pygame.K_a, pygame.K_s, pygame.K_d]
@@ -200,17 +211,21 @@ def main():
         for event in pygame.event.get():
             if event.type == pygame.QUIT:
                 running = False
-            elif event.type == pygame.KEYDOWN:
+            elif event.type == pygame.KEYDOWN and match_state != "STOPPED":
                 handle_input(game_screen, event)
 
-            if random.random() < 0.05:
+        if match_state != "STOPPED":
+            if random.random() < 0.005:
                 generate_fruits(player1)
 
-            get_scene_fruits(player1)
-            get_player_scores(player1)
-            draw_scene(game_screen)
-            get_match_ending(player1)
+            try:
+                get_scene_fruits(player1)
+                get_player_scores(player1)
+                get_match_ending(player1)
+            except (ConnectionResetError, ConnectionAbortedError, OSError):
+                match_state = "STOPPED"
 
+        draw_scene(game_screen)
         pygame.display.flip()
         clock.tick(30)
 

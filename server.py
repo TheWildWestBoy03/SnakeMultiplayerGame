@@ -2,6 +2,9 @@ import socket
 import threading
 import json
 import uuid
+
+import pygame
+
 import message
 import random
 import math
@@ -50,8 +53,15 @@ def handle_client(connection):
                     response = message.Message(new_message["id"], new_message["player"], "Invalid token", "RESPONSE")
                     encoded_response = json.dumps(response.return_dictionary()).encode('utf-8')
                     connection.send(encoded_response)
+                    break;
                 else:
-                    tail = {"x": math.floor(random.random() * 680), "y": math.floor(random.random() * 450)}
+                    tail = {}
+
+                    if new_message["player"] == "player1":
+                        tail = {"x": 200, "y": 200}
+                    else:
+                        tail = {"x": 500, "y": 200}
+
                     player_coordinates = [tail]
 
                     for i in range(0, 3):
@@ -66,7 +76,9 @@ def handle_client(connection):
                     response = message.Message(new_message["id"], new_message["player"], player_coordinates, "RESPONSE")
                     encoded_response = json.dumps(response.return_dictionary()).encode('utf-8')
                     connection.send(encoded_response)
-
+            elif new_message["type"] == "GAMEMODE":
+                response = message.Message(new_message["id"], new_message["player"], "CONTINUOUS", "RESPONSE")
+                connection.send(json.dumps(response.return_dictionary()).encode('utf-8'))
             elif new_message["type"] == "MOVE":
                 player_coordinates = new_message["message"]["currentPositions"]
                 last_direction = new_message["message"]["lastDirection"]
@@ -77,6 +89,8 @@ def handle_client(connection):
                     encoded_response = json.dumps(response.return_dictionary()).encode('utf-8')
                     connection.send(encoded_response)
                 else:
+                    player_coordinates_before_move = [p.copy() for p in player_coordinates]
+
                     former_tail = player_coordinates[0]
                     player_coordinates.pop(0)
 
@@ -170,6 +184,24 @@ def handle_client(connection):
                             player_winner = "player2"
                             player_loser = "player1"
 
+                    blocked = False
+
+                    if new_message["player"] == "player1":
+                        for part in player2_snake:
+                            other_rect = [part["x"], part["y"], 30, 30]
+                            if handle_rect_collision(snake_head_rect, other_rect):
+                                blocked = True
+                                break
+                    else:
+                        for part in player1_snake:
+                            other_rect = [part["x"], part["y"], 30, 30]
+                            if handle_rect_collision(snake_head_rect, other_rect):
+                                blocked = True
+                                break
+
+                    if blocked:
+                        player_coordinates = [p.copy() for p in player_coordinates_before_move]
+
                     for fruit in fruits_to_delete:
                         game_fruits.remove(fruit)
 
@@ -233,6 +265,8 @@ def handle_client(connection):
                 connection.send(json.dumps(response_message.return_dictionary()).encode("utf-8"))
 
                 if (match_result[0] == "STOPPED"):
+                    connection.shutdown(socket.SHUT_RDWR)
+                    connection.close()
                     break
             else:
                 response = message.Message(new_message["id"], new_message["player"], "INVALID COMMAND", "RESPONSE")
@@ -251,3 +285,5 @@ for i in range(MAXIMUM_CLIENTS):
 
 for thread in threads:
     thread.join()
+
+print("done")
