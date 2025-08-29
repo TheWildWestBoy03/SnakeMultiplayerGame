@@ -5,7 +5,6 @@ import message
 import uuid
 import json
 
-threads = []
 players = []
 generated_fruits = []
 player1_score = 0
@@ -14,7 +13,7 @@ match_state = "RUNNING"
 player_winner = "NONE"
 player_loser = "NONE"
 
-# represents the current client, whose main role is just drawing on a window. The window is share
+# represents the current client, whose main role is just drawing on a window. The window is shared
 # among all players(currently limited to maximum 2 players)
 class Player:
     def __init__(self, name, color, login_token, screen, keys, last_direction):
@@ -37,6 +36,7 @@ class Player:
     def connect(self):
         self.socket.connect((self.server, self.port))
 
+    # client sends the login_token, hardcoded on client, not processed at run time
     def send_login_token(self):
         new_message = message.Message(str(uuid.uuid4()), self.name, self.login_token, "LOGIN")
         encoded_message = json.dumps(new_message.return_dictionary()).encode("utf-8")
@@ -45,6 +45,7 @@ class Player:
         response = json.loads(self.socket.recv(2048).decode("utf-8"))
         return response["message"]
 
+    # game mode setting request to server
     def set_game_mode(self):
         new_message = message.Message(str(uuid.uuid4()), self.name, "","GAMEMODE")
         encoded_message = json.dumps(new_message.return_dictionary()).encode("utf-8")
@@ -52,6 +53,7 @@ class Player:
         response = json.loads(self.socket.recv(2048).decode("utf-8"))
         self.game_mode = response["message"]
 
+    # calling the initialization function and drawing the first state of the player
     def update_function(self):
         self.snake_positions = self.send_login_token()
         if self.send_login_token() == "Invalid token":
@@ -72,6 +74,7 @@ class Player:
         print(self.socket)
         print("Last direction " + self.last_direction)
 
+# initialization of pygame screen
 def configure_pygame():
     pygame.init()
 
@@ -82,14 +85,13 @@ def configure_pygame():
 
     return screen
 
-def thread_function(player):
-    player.update_function()
-
+# doesn't let other players to be moved simultaneously
 def stop_other_players(running_player):
     for player in players:
         if running_player.name != player.name:
             player.current_direction = ""
 
+# pygame inpute handling
 def handle_input(game_screen, event):
     for player in players:
         stop_other_players(player)
@@ -119,11 +121,13 @@ def handle_input(game_screen, event):
             player.snake_positions = response["message"]
             player.last_direction = player.current_direction
 
+# fruit generation
 def generate_fruits(player):
     generate_fruits_message = message.Message(str(uuid.uuid4()), player.name, "GENERATE_FRUITS", "FRUIT_REQUEST")
     player.socket.send(json.dumps(generate_fruits_message.return_dictionary()).encode("utf-8"))
     response = json.loads(player.socket.recv(2048).decode("utf-8"))
 
+# retrieving all saved fruits for rendering
 def get_scene_fruits(player):
     global generated_fruits
 
@@ -132,6 +136,7 @@ def get_scene_fruits(player):
     response = json.loads(player.socket.recv(2048).decode("utf-8"))
     generated_fruits = response["message"]
 
+# retrieving scoring data for displaying
 def get_player_scores(player):
     global player1_score, player2_score
     get_scores_message = message.Message(str(uuid.uuid4()), player.name, "GET_SCORES", "GET_SCORES")
@@ -140,6 +145,7 @@ def get_player_scores(player):
     player1_score = response["message"][0]
     player2_score = response["message"][1]
 
+# tracks the match state for safety exiting process
 def get_match_ending(player):
     global match_state, player_winner, player_loser
     get_ending_message = message.Message(str(uuid.uuid4()), "client", "GET_MATCH_STATE", "GET_MATCH_STATE")
@@ -154,6 +160,7 @@ def get_match_ending(player):
         player_winner = response["message"][1]
         player_loser = response["message"][2]
 
+# main drawing function
 def draw_scene(game_screen):
     game_screen.fill((255, 255, 255))
     game_screen.fill((0, 0, 0), (30, 30, game_screen.get_width() - 2 * 30, game_screen.get_height() - 2 * 30))

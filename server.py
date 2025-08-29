@@ -32,6 +32,7 @@ player2_score = 0
 
 print("Waiting for connection...")
 
+# rect collision detection function
 def handle_rect_collision(rect1, rect2):
     [left_corner1_x, left_corner1_y, height1, width1] = rect1
     [left_corner2_x, left_corner2_y, height2, width2] = rect2
@@ -49,14 +50,22 @@ def handle_client(connection):
             if new_message["type"] == "LOGIN":
                 client_token = new_message["message"]
 
+                # when the login token is wrong, the match can't happen, so the server closes the socket
                 if client_token != login_token:
+                    if (new_message["player"] == "player2"):
+                        player_winner = "player1"
+                        player_loser = "player2"
+                    else:
+                        player_winner = "player2"
+                        player_loser = "player1"
+
                     response = message.Message(new_message["id"], new_message["player"], "Invalid token", "RESPONSE")
                     encoded_response = json.dumps(response.return_dictionary()).encode('utf-8')
                     connection.send(encoded_response)
-                    break;
                 else:
                     tail = {}
 
+                    # initialization of snakes
                     if new_message["player"] == "player1":
                         tail = {"x": 200, "y": 200}
                     else:
@@ -84,6 +93,7 @@ def handle_client(connection):
                 last_direction = new_message["message"]["lastDirection"]
                 current_direction = new_message["message"]["type"]
 
+                # deciding the snake position based on the last direction and the current inputed direction
                 if current_direction == "":
                     response = message.Message(new_message["id"], new_message["player"], player_coordinates, "RESPONSE")
                     encoded_response = json.dumps(response.return_dictionary()).encode('utf-8')
@@ -159,6 +169,7 @@ def handle_client(connection):
                     snake_head = player_coordinates[3]
                     snake_head_rect = [player_coordinates[3]["x"], player_coordinates[3]["y"], 30, 30]
 
+                    # checks for wall detection
                     if snake_head["x"] < 30 or snake_head["x"] > 770 or snake_head["y"] < 30 or snake_head["y"] > 570:
                         if (new_message["player"] == "player2"):
                             player_winner = "player1"
@@ -167,6 +178,7 @@ def handle_client(connection):
                             player_winner = "player2"
                             player_loser = "player1"
 
+                    # checks for collision with fruits
                     fruits_to_delete = []
                     for fruit in game_fruits:
                         fruit_rect = [fruit[0], fruit[1], 10, 10]
@@ -177,6 +189,7 @@ def handle_client(connection):
                             else:
                                 player2_score += 100
 
+                        # match finishing condition
                         if player1_score >= 1000:
                             player_winner = "player1"
                             player_loser = "player2"
@@ -186,6 +199,7 @@ def handle_client(connection):
 
                     blocked = False
 
+                    # handles snakes collision
                     if new_message["player"] == "player1":
                         for part in player2_snake:
                             other_rect = [part["x"], part["y"], 30, 30]
@@ -217,6 +231,7 @@ def handle_client(connection):
                 to_generate = False
                 fruit_position = []
 
+                # random fruit generation to make sure no one spawns on snakes or walls
                 while to_generate == False:
                     fruit_position = [random.random() * 500 + 200, random.random() * 400 + 100]
                     to_generate = True
